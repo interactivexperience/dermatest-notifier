@@ -6,6 +6,13 @@ const STUDIES_URL = "https://dermatest.com/de/studien/";
 const USER_AGENT =
   "Mozilla/5.0 (compatible; DermatestNotifierBot/1.0; +https://github.com/interactivexperience/dermatest-notifier)";
 
+// Begriffe, die auf einen begleiteten Vor-Ort-Termin (ärztliche/fachliche
+// Kontrolle im Testzentrum) hindeuten - wird gegen Titel, "Zeitaufwand"- und
+// "Besonderheiten"-Text geprüft. Bewusst nicht "Zentrum"/"Standort", da jede
+// Studie (auch reine Selbstanwendung zuhause) ein Probandenzentrum als
+// Anlaufstelle listet, ohne dass das einen Vor-Ort-Termin bedeutet.
+const ON_SITE_SUPERVISION_PATTERN = /kontrolle|ärztlich|begleitet|vor[\s-]?ort|termin/i;
+
 const TOPICS_PATH = fileURLToPath(new URL("../topics.json", import.meta.url));
 const SEEN_PATH = fileURLToPath(new URL("../data/seen.json", import.meta.url));
 
@@ -21,9 +28,7 @@ function normalize(text) {
 }
 
 async function fetchStudies() {
-  const res = await fetch(STUDIES_URL, {
-    headers: { "User-Agent": USER_AGENT },
-  });
+  const res = await fetch(STUDIES_URL, { headers: { "User-Agent": USER_AGENT } });
   if (!res.ok) {
     throw new Error(`Abruf der Studienseite fehlgeschlagen: ${res.status} ${res.statusText}`);
   }
@@ -47,8 +52,7 @@ async function fetchStudies() {
       "";
 
     // Reihenfolge auf der Karte: erstes dynamisches Feld = Status (leer = offen),
-    // zweites = Startdatum. Nicht eindeutig ausgezeichnet, daher positionsbasiert
-    // (siehe README für die Begründung und den Sanity-Check unten).
+    // zweites = Startdatum. Nicht eindeutig ausgezeichnet, daher positionsbasiert.
     const dynamicFields = $item.find(".jet-listing-dynamic-field__content");
     const statusText = $(dynamicFields.get(0)).text().trim();
     const dateText = $(dynamicFields.get(1)).text().trim();
@@ -87,22 +91,65 @@ async function fetchStudies() {
   return studies;
 }
 
+// Lädt die Detailseite einer Studie und extrahiert die Felder, die zeigen, ob
+// ein begleiteter Vor-Ort-Termin nötig ist. Elementor rendert Label ("Zeitaufwand:")
+// und Wert als getrennte, aufeinanderfolgende "Blatt"-Elemente ohne gemeinsame
+// eindeutige Klasse - daher positionsbasiert wie schon auf der Archivseite.
+async function fetchDetailInfo(url) {
+  const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
+  if (!res.ok) {
+    throw new Error(`${res.status} ${res.statusText}`);
+  }
+  const html = await res.text();
+  const $ = cheerio.load(html);
+
+  const leaves = [];
+  $("body *").each((_, el) => {
+    const $el = $(el);
+    if ($el.children().length > 0) return;
+    const text = $el.text().replace(/\s+/g, " ").trim();
+    if (text) leaves.push(text);
+  });
+  const zeitaufwandIdx = leaves.indexOf("Zeitaufwand:");
+  const zeitaufwand = zeitaufwandIdx !== -1 ? leaves[zeitaufwandIdx + 1] : "";
+
+  // "Besonderheiten:" ist im DOM nicht zuverlässig positionsbasiert zu greifen
+  // (Study-Nurse-Widget dazwischen variiert), daher als Text-Ausschnitt zwischen
+  // dem Label und dem nächsten bekannten Seiten-Baustein.
+  const bodyText = $("body").text().replace(/\s+/g, " ").trim();
+  const besonderheitenMatch = bodyText.match(/Besonderheiten:\s*(.*?)\s*Eingeloggt bleiben/);
+  const besonderheiten = besonderheitenMatch ? besonderheitenMatch[1] : "";
+
+  return { zeitaufwand, besonderheiten };
+}
+
+function requiresOnSiteSupervision(study, detail) {
+  const haystack = [study.title, detail.zeitaufwand, detail.besonderheiten].join(" ");
+  return ON_SITE_SUPERVISION_PATTERN.test(haystack);
+}
+
 function matchedTopicsFor(study, topics) {
   const haystack = normalize(study.title);
   return topics.filter((topic) => haystack.includes(normalize(topic)));
 }
 
-async function createIssue({ owner, repo, token, study }) {
-  const title = `Neue Dermatest-Studie: ${study.title}`;
-  const bodyLines = [
-    `**Themen-Treffer:** ${study.matchedTopics.join(", ")}`,
-    `**Status:** ${study.status}`,
-    study.date ? `**Datum:** ${study.date}` : null,
-    study.location ? `**Ort:** ${study.location}` : null,
-    study.link ? `**Link:** ${study.link}` : null,
-    "",
-    `cc @${owner}`,
-  ].filter((line) => line !== null);
+async function createDigestIssue({ owner, repo, token, studies }) {
+  const title =
+    studies.length === 1 ? `Neue Dermatest-Studie: ${studies[0].title}` : `${studies.length} neue Dermatest-Studien`;
+
+  const sections = studies.map((s) => {
+    const lines = [
+      `### ${s.title}`,
+      `**Themen-Treffer:** ${s.matchedTopics.join(", ")}`,
+      `**Datum:** ${s.date || "-"}`,
+      `**Ort:** ${s.location || "-"}`,
+      s.zeitaufwand ? `**Zeitaufwand:** ${s.zeitaufwand}` : null,
+      `**Link:** ${s.link}`,
+    ].filter((line) => line !== null);
+    return lines.join("\n");
+  });
+
+  const body = [...sections, `cc @${owner}`].join("\n\n---\n\n");
 
   const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues`, {
     method: "POST",
@@ -112,16 +159,12 @@ async function createIssue({ owner, repo, token, study }) {
       "Content-Type": "application/json",
       "X-GitHub-Api-Version": "2022-11-28",
     },
-    body: JSON.stringify({
-      title,
-      body: bodyLines.join("\n"),
-      assignees: [owner],
-    }),
+    body: JSON.stringify({ title, body, assignees: [owner] }),
   });
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Issue-Erstellung für Studie ${study.id} fehlgeschlagen (${res.status}): ${text}`);
+    throw new Error(`Issue-Erstellung fehlgeschlagen (${res.status}): ${text}`);
   }
 }
 
@@ -139,39 +182,77 @@ async function main() {
   const studies = await fetchStudies();
   console.log(`${studies.length} Studien auf der Seite gefunden.`);
 
-  const newMatches = [];
-  for (const study of studies) {
-    if (seenIds.has(study.id)) continue;
-    const matchedTopics = matchedTopicsFor(study, topics);
-    if (matchedTopics.length > 0) {
-      newMatches.push({ ...study, matchedTopics });
-    }
-  }
+  const topicMatches = studies
+    .filter((s) => !seenIds.has(s.id))
+    .map((s) => ({ ...s, matchedTopics: matchedTopicsFor(s, topics) }))
+    .filter((s) => s.matchedTopics.length > 0);
 
-  if (newMatches.length === 0) {
-    console.log("Keine neuen Treffer.");
+  if (topicMatches.length === 0) {
+    console.log("Keine neuen Themen-Treffer.");
     return;
   }
 
-  console.log(`${newMatches.length} neue Treffer gefunden:`);
-  for (const match of newMatches) {
-    console.log(` - ${match.title} (Themen: ${match.matchedTopics.join(", ")})`);
+  const openMatches = topicMatches.filter((s) => s.status === "offen");
+  const bookedMatches = topicMatches.filter((s) => s.status !== "offen");
+  if (bookedMatches.length > 0) {
+    console.log(
+      `${bookedMatches.length} Treffer übersprungen (bereits ausgebucht): ${bookedMatches.map((s) => s.title).join(", ")}`
+    );
+  }
+
+  const included = [];
+  const excludedOnSite = [];
+  const newlySeenIds = [];
+
+  for (const study of openMatches) {
+    let detail;
+    try {
+      detail = await fetchDetailInfo(study.link);
+    } catch (err) {
+      console.warn(`Detailseite für "${study.title}" nicht prüfbar (${err.message}) - wird nächstes Mal erneut versucht.`);
+      continue; // absichtlich NICHT als seen markieren
+    }
+    newlySeenIds.push(study.id);
+    if (requiresOnSiteSupervision(study, detail)) {
+      excludedOnSite.push(study);
+    } else {
+      included.push({ ...study, zeitaufwand: detail.zeitaufwand });
+    }
+  }
+
+  if (newlySeenIds.length > 0) {
+    const updatedSeen = Array.from(new Set([...seen, ...newlySeenIds]));
+    writeFileSync(SEEN_PATH, JSON.stringify(updatedSeen, null, 2) + "\n");
+    console.log(`seen.json aktualisiert (${updatedSeen.length} bekannte Studien-IDs).`);
+  }
+
+  if (excludedOnSite.length > 0) {
+    console.log(
+      `${excludedOnSite.length} Treffer übersprungen (Vor-Ort-Kontrolltermin nötig): ${excludedOnSite
+        .map((s) => s.title)
+        .join(", ")}`
+    );
+  }
+
+  if (included.length === 0) {
+    console.log("Keine neuen Treffer, die alle Kriterien erfüllen (offen + reine Selbstanwendung zuhause).");
+    return;
+  }
+
+  console.log(`${included.length} neue passende Treffer - lege Sammel-Issue an:`);
+  for (const s of included) {
+    console.log(` - ${s.title} (Themen: ${s.matchedTopics.join(", ")})`);
   }
 
   const token = process.env.GITHUB_TOKEN;
   const repository = process.env.GITHUB_REPOSITORY; // "owner/repo"
   if (!token || !repository) {
-    throw new Error("GITHUB_TOKEN / GITHUB_REPOSITORY fehlen - kann keine Issues anlegen.");
+    throw new Error("GITHUB_TOKEN / GITHUB_REPOSITORY fehlen - kann kein Issue anlegen.");
   }
   const [owner, repo] = repository.split("/");
 
-  for (const study of newMatches) {
-    await createIssue({ owner, repo, token, study });
-  }
-
-  const updatedSeen = Array.from(new Set([...seen, ...newMatches.map((s) => s.id)]));
-  writeFileSync(SEEN_PATH, JSON.stringify(updatedSeen, null, 2) + "\n");
-  console.log(`seen.json aktualisiert (${updatedSeen.length} bekannte Studien-IDs).`);
+  await createDigestIssue({ owner, repo, token, studies: included });
+  console.log("Sammel-Issue angelegt.");
 }
 
 main().catch((err) => {

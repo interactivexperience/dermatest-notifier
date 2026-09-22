@@ -12,11 +12,20 @@ deiner Themen auftaucht.
   echte Kategorie-/Themen-Taxonomie (nur einen Standort-Filter) — "Thema" bedeutet hier deshalb:
   case-insensitive Teilstring-Suche im Studientitel. Stichwörter wie `Gesichtscreme`, `Windel`,
   `Haarausfall` funktionieren gut.
-- **Deduplizierung** (`data/seen.json`): IDs bereits benachrichtigter Studien, damit du nicht bei
-  jedem Lauf erneut benachrichtigt wirst.
-- **Benachrichtigung**: bei einem neuen Treffer legt der Workflow ein GitHub-Issue in diesem Repo
-  an (zugewiesen an dich) → GitHub verschickt dafür automatisch eine E-Mail an deine
-  GitHub-Notification-Adresse.
+- **Filter auf offene Studien**: bereits ausgebuchte Treffer werden ignoriert (kein Eintrag in
+  `seen.json`, damit sie nicht dauerhaft blockiert bleiben, falls sich der Status doch mal ändert).
+- **Filter auf reine Selbstanwendung zuhause**: für jeden verbleibenden Treffer wird zusätzlich die
+  Studien-Detailseite geladen und die Felder "Zeitaufwand" sowie "Besonderheiten" (plus der Titel)
+  auf Hinweise auf einen begleiteten Vor-Ort-Termin durchsucht (Wörter wie "Kontrolle", "ärztlich",
+  "begleitet", "Termin"). Treffer mit einem solchen Hinweis werden nicht gemeldet, aber als
+  "geprüft" in `seen.json` vermerkt, damit sie nicht jede Woche erneut geladen werden. Das ist ein
+  Text-Heuristik, keine strukturierte Angabe von Dermatest — bei ungewöhnlichen Formulierungen kann
+  das im Einzelfall daneben liegen.
+- **Deduplizierung** (`data/seen.json`): IDs bereits geprüfter/benachrichtigter Studien, damit du
+  nicht bei jedem Lauf erneut benachrichtigt wirst.
+- **Benachrichtigung**: alle neuen Treffer eines Laufs werden in **einem einzigen** GitHub-Issue
+  gesammelt (zugewiesen an dich) → GitHub verschickt dafür automatisch eine E-Mail an deine
+  GitHub-Notification-Adresse. Kein Treffer → keine Mail.
 - **Cron**: `.github/workflows/check-studies.yml` läuft jeden Montag um 08:00 Uhr UTC automatisch,
   plus manuell auslösbar über den "Run workflow"-Button im Actions-Tab.
 
@@ -67,9 +76,12 @@ Dermatest kann die Seitenstruktur ändern. Zwei Signale dafür:
 
 - Der Workflow-Log warnt, wenn die von JetEngine gemeldete Studienzahl (`found_posts`) nicht mit
   der Anzahl extrahierter Studien übereinstimmt.
-- `.github/workflows/diagnose.yml` (manuell auslösbar) lädt die Seite roh und gibt das komplette
-  HTML im Log aus — damit lässt sich die aktuelle Struktur wieder inspizieren, falls die
+- `.github/workflows/diagnose.yml` (manuell auslösbar) lädt die Archiv-Seite roh und gibt das
+  komplette HTML im Log aus — damit lässt sich die aktuelle Struktur wieder inspizieren, falls die
   CSS-Selektoren in `scripts/check-studies.mjs` angepasst werden müssen.
+- `.github/workflows/diagnose-detail.yml` (manuell auslösbar, mit URL-Eingabefeld) macht dasselbe
+  für eine einzelne Studien-Detailseite und zeigt zusätzlich, was die positionsbasierte
+  Feld-Extraktion (Zeitaufwand, Besonderheiten, ...) aktuell daraus liest.
 
 ## Hinweis zu Themen-Änderungen
 

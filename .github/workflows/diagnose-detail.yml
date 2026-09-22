@@ -2,6 +2,11 @@ name: Diagnose Dermatest detail page structure
 
 on:
   workflow_dispatch:
+    inputs:
+      url:
+        description: "URL einer Studien-Detailseite (https://dermatest.com/de/studien/...)"
+        required: true
+        default: "https://dermatest.com/de/studien/"
 
 jobs:
   fetch:
@@ -13,4 +18,4 @@ jobs:
           node-version: "20"
           cache: "npm"
       - run: npm ci
-      - run: node scripts/_diagnose-detail.mjs
+      - run: node scripts/diagnose-detail.mjs "${{ inputs.url }}"
