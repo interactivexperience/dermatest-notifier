@@ -17,8 +17,8 @@ deiner Themen auftaucht.
 - **Benachrichtigung**: bei einem neuen Treffer legt der Workflow ein GitHub-Issue in diesem Repo
   an (zugewiesen an dich) → GitHub verschickt dafür automatisch eine E-Mail an deine
   GitHub-Notification-Adresse.
-- **Cron**: `.github/workflows/check-studies.yml` läuft alle 3 Stunden automatisch, plus manuell
-  auslösbar über den "Run workflow"-Button im Actions-Tab.
+- **Cron**: `.github/workflows/check-studies.yml` läuft jeden Montag um 08:00 Uhr UTC automatisch,
+  plus manuell auslösbar über den "Run workflow"-Button im Actions-Tab.
 
 ## Einmaliges Setup
 
