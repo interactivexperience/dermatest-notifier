@@ -1,0 +1,17 @@
+name: Diagnose Dermatest page structure
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch studies page
+        run: |
+          curl -sL -A "Mozilla/5.0 (compatible; DermatestNotifierBot/1.0; +https://github.com/interactivexperience/dermatest-notifier)" \
+            "https://dermatest.com/de/studien/" -o page.html
+          echo "----- BYTE LENGTH -----"
+          wc -c page.html
+          echo "----- FULL HTML -----"
+          cat page.html
