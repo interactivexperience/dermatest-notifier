@@ -39,19 +39,17 @@ nirgendwohin sonst geschickt.
 3. Permissions: **Contents: Read and write**
 4. Token kopieren, auf der Themen-Seite einfügen und "Token speichern" klicken
 
-### 3. E-Mail-Adresse für Benachrichtigungen einrichten
+### 3. E-Mail-Benachrichtigung sicherstellen
 
-Damit die Issue-Benachrichtigung an `newsletter.sled273@passinbox.com` geht (statt an deine
-primäre GitHub-Mail):
+Die Benachrichtigung geht an die primäre E-Mail-Adresse deines GitHub-Accounts (Settings →
+**Emails**). Damit sie dort auch wirklich ankommt statt nur als Web-Benachrichtigung zu erscheinen:
 
-1. GitHub → Settings → **Emails** → Adresse hinzufügen, Verifizierungsmail bestätigen
-2. GitHub → Settings → **Notifications** → als "Default notification email" diese Adresse wählen
-   (oder als Override speziell für dieses Repo/diese Organisation, falls verfügbar)
-3. Sicherstellen, dass unter "Notifications" die Option für zugewiesene Issues bzw.
-   "Participating" auf **Email** steht (nicht nur "Web"/"GitHub App")
+GitHub → Settings → **Notifications** → im Abschnitt "Participating" sicherstellen, dass
+**Email** aktiviert ist (nicht nur die Standard-Web-Benachrichtigung).
 
-Falls du stattdessen einfach deine normale GitHub-Mailadresse nutzen willst: einfach Schritt 3
-prüfen, Schritt 1+2 entfallen dann.
+Willst du stattdessen eine andere Adresse verwenden: unter Settings → Emails hinzufügen und
+verifizieren (manche Wegwerf-/Alias-Mail-Domains lässt GitHub dabei nicht zu), dann unter
+Settings → Notifications als "Default notification email" auswählen.
 
 ### 4. Themen eintragen
 
