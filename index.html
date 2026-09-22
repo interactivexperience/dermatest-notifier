@@ -267,19 +267,47 @@
   }
 
   async function addTopic() {
-    const value = newTopicInput.value.trim();
-    if (!value) return;
-    if (currentTopics.some((t) => t.toLowerCase() === value.toLowerCase())) {
-      setStatus("Thema existiert bereits.", "error");
+    const raw = newTopicInput.value.trim();
+    if (!raw) return;
+
+    // Mehrere, mit Komma getrennte Themen in einem Rutsch eintragen erlauben
+    // (z.B. copy-paste einer Liste) - sonst landet der ganze String als ein
+    // einziges, nie matchendes "Thema".
+    const candidates = raw
+      .split(",")
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+
+    const existingLower = new Set(currentTopics.map((t) => t.toLowerCase()));
+    const toAdd = [];
+    const duplicates = [];
+    for (const candidate of candidates) {
+      if (existingLower.has(candidate.toLowerCase()) || toAdd.some((t) => t.toLowerCase() === candidate.toLowerCase())) {
+        duplicates.push(candidate);
+      } else {
+        toAdd.push(candidate);
+      }
+    }
+
+    if (toAdd.length === 0) {
+      setStatus("Thema/Themen existieren bereits.", "error");
       return;
     }
-    currentTopics.push(value);
+
+    const previousTopics = [...currentTopics];
+    currentTopics.push(...toAdd);
     renderTopics();
-    const ok = await saveTopics(`Thema hinzugefügt: ${value}`);
+
+    const message =
+      toAdd.length === 1 ? `Thema hinzugefügt: ${toAdd[0]}` : `${toAdd.length} Themen hinzugefügt: ${toAdd.join(", ")}`;
+    const ok = await saveTopics(message);
     if (ok) {
       newTopicInput.value = "";
+      if (duplicates.length > 0) {
+        setStatus(`Gespeichert. Übersprungen (bereits vorhanden): ${duplicates.join(", ")}`, "ok");
+      }
     } else {
-      currentTopics.pop();
+      currentTopics = previousTopics;
       renderTopics();
     }
   }
