@@ -1,0 +1,13 @@
+{
+  "name": "dermatest-notifier",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Prüft https://dermatest.com/de/studien/ auf neue Studien zu selbst gewählten Themen und benachrichtigt per GitHub-Issue (E-Mail).",
+  "scripts": {
+    "check": "node scripts/check-studies.mjs"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0"
+  }
+}
